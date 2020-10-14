@@ -1,0 +1,134 @@
+Resources:
+  Pipeline:
+    Type: AWS::CodePipeline::Pipeline
+    Properties:
+      # Artifact store location
+      ArtifactStore:
+        Type: S3
+        Location:
+          Ref: ArtifactBucket
+
+      # Add the IAM role to the bucket
+      RoleArn: !GetAtt [PipelineRole, Arn]
+
+      # Stages
+      Stages:
+        # Stage for loading code from github
+        - Name: Source
+          Actions:
+            # Determine the action type. See https://docs.aws.amazon.com/codepipeline/latest/userguide/reference-pipeline-structure.html#actions-valid-providers
+            - ActionTypeId:
+                Category: Source
+                Owner: AWS
+                Provider: CodeStarSourceConnection
+                Version: "1"
+
+              # Connect the pipeline to the git provider. The CodeStar connection could, as of right now, be either Github or Bitbucket. See documentation for latest info: https://docs.aws.amazon.com/codepipeline/latest/userguide/action-reference-CodestarConnectionSource.html
+              Configuration:
+                ConnectionArn:
+                  Ref: CodeStarConnection
+                FullRepositoryId: !Join
+                  - ""
+                  - - Ref: RepositoryOwner
+                    - "/"
+                    - Ref: RepositoryName
+                BranchName:
+                  Ref: BranchName
+                OutputArtifactFormat: "CODE_ZIP"
+
+              # Name the output of this action. Note that this is the name that will be referenced further down the pipeline
+              OutputArtifacts:
+                - Name: SourceArtifact
+
+              # Action name
+              Name: Get_source
+
+        # Stage for saving the loaded code in an S3 bucket
+        - Name: Deploy
+          Actions:
+            - ActionTypeId:
+                Category: Deploy
+                Owner: AWS
+                Provider: S3
+                Version: 1
+
+              # Configure where to deploy
+              Configuration:
+                BucketName:
+                  Ref: OutputBucket
+                Extract: True
+
+              # Get the artifact produced in the above stage
+              InputArtifacts:
+                - Name: SourceArtifact
+
+              # Action name
+              Name: Deploy_source
+
+      # Pipeline name
+      Name:
+        Ref: PipelineName
+
+      # Tags
+      Tags:
+        - Key: Type
+          Value: Learning
+
+  # IAM role for the pipeline
+  PipelineRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Action: ["sts:AssumeRole"]
+            Effect: Allow
+            Principal:
+              Service: [codepipeline.amazonaws.com]
+
+      # Note: The policies of this role only allow for reading code and deploying it. More permissions are required for building code
+      Policies:
+        - PolicyName: "root"
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: "Allow"
+                Action:
+                  - "s3:*"
+                  - "codestar-connections:UseConnection"
+                Resource: "*"
+
+Parameters:
+  # Artifact bucket
+  ArtifactBucket:
+    Type: String
+    Description: Enter the name of the S3 bucket where you want the artifact to be placed
+
+  # Output bucket
+  OutputBucket:
+    Type: String
+    Description: Enter the name of the S3 bucket where you want the deployment to be placed
+
+  # CodeStar Connection
+  CodeStarConnection:
+    Type: String
+    Description: Enter the ARN of the CodeStar connection you want to use
+
+  # Github username
+  RepositoryOwner:
+    Type: String
+    Description: Enter the Github username of the repository owner
+
+  # Github repository name
+  RepositoryName:
+    Type: String
+    Description: Enter the name of the repository you want to build
+
+  # Branch name
+  BranchName:
+    Type: String
+    Description: Enter the branch name that you want to be used for the build
+
+  # Pipeline name
+  PipelineName:
+    Type: String
+    Description: Enter what you want to call this pipeline
