@@ -69,11 +69,6 @@ Resources:
       Name:
         Ref: PipelineName
 
-      # Tags
-      Tags:
-        - Key: Type
-          Value: Learning
-
   # IAM role for the pipeline
   PipelineRole:
     Type: AWS::IAM::Role
